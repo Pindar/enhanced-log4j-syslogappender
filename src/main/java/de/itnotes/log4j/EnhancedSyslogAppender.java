@@ -47,7 +47,8 @@ public class EnhancedSyslogAppender extends AppenderSkeleton {
         if (byteCount <= Integer.valueOf(maxPackageSize)) {
             sqw.write(packet);
         } else {
-            int split = header.length() + (packet.length() - header.length()) / 2;
+            int split = header.length() + getTag().length() + splitMessageBeginText.length() +
+                    (packet.length() - header.length() - getTag().length() - splitMessageBeginText.length()) / 2;
             splitPacket(header, packet.substring(0, split) + "...");
             splitPacket(header, header + getTag() + splitMessageBeginText + packet.substring(split));
         }
