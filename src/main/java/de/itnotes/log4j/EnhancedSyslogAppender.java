@@ -1,8 +1,9 @@
 package de.itnotes.log4j;
 
+import org.apache.log4j.AppenderSkeleton;
 import org.apache.log4j.Layout;
 import org.apache.log4j.helpers.SyslogQuietWriter;
-import org.apache.log4j.net.SyslogAppender;
+import org.apache.log4j.helpers.SyslogWriter;
 import org.apache.log4j.spi.LoggingEvent;
 
 import java.io.IOException;
@@ -14,6 +15,9 @@ import java.util.Locale;
 
 /**
  * This is an enhanced version of the famous SyslogAppender
+ * Basically most of the code is just a copy of SyslogAppender v1.2.17.
+ * The changed methods are marked with comments.
+ *
  * It let's you define
  * - the text that is used in the beginning of a splitted messge (e.g. define the tag name again)
  * - the maximum package size which can be very handy for modern syslog servers
@@ -21,37 +25,22 @@ import java.util.Locale;
  *
  * @author Simon Dittlmann
  */
-public class EnhancedSyslogAppender extends SyslogAppender {
+public class EnhancedSyslogAppender extends AppenderSkeleton {
 
-    private String splitMessageBeginText;
+    private String tag = "";
+    private String splitMessageBeginText = "...";
     private String maxPackageSize = "1019";
-    static final String TAB = "    ";
 
-    // Have LOG_USER as default
-    int syslogFacility = LOG_USER;
-    String facilityStr;
-    boolean facilityPrinting = false;
-
-    //SyslogTracerPrintWriter stp;
-    SyslogQuietWriter sqw;
-    String syslogHost;
 
     /**
-     * Date format used if header = true.
-     * @since 1.2.15
+     * Note: enhanced implementation
+     *
+     * This implementation of splitting the packet lets you define
+     * how the second message should start. In addition you can specify the
+     * maximum size of a package
+     * @param header the syslog header
+     * @param packet the payload
      */
-    private final SimpleDateFormat dateFormat = new SimpleDateFormat("MMM dd HH:mm:ss ", Locale.ENGLISH);
-    /**
-     * Host name used to identify messages from this appender.
-     * @since 1.2.15
-     */
-    private String localHostname;
-
-    /**
-     * Set to true after the header of the layout has been sent or if it has none.
-     */
-    private boolean layoutHeaderChecked = false;
-
     private void splitPacket(final String header, final String packet) {
         int byteCount = packet.getBytes().length;
 
@@ -60,10 +49,15 @@ public class EnhancedSyslogAppender extends SyslogAppender {
         } else {
             int split = header.length() + (packet.length() - header.length()) / 2;
             splitPacket(header, packet.substring(0, split) + "...");
-            splitPacket(header, header + splitMessageBeginText + packet.substring(split));
+            splitPacket(header, header + getTag() + splitMessageBeginText + packet.substring(split));
         }
     }
 
+    /**
+     * Note: enhanced implementation
+     *
+     * @param event
+     */
     public void append(LoggingEvent event) {
 
         if(!isAsSevereAsThreshold(event.getLevel()))
@@ -71,7 +65,7 @@ public class EnhancedSyslogAppender extends SyslogAppender {
 
         // We must not attempt to append if sqw is null.
         if(sqw == null) {
-            errorHandler.error("No syslog host is set for SyslogAppedender named \""+
+            errorHandler.error("No syslog host is set for EnhancedSyslogAppender named \""+
                     this.name+"\".");
             return;
         }
@@ -95,6 +89,7 @@ public class EnhancedSyslogAppender extends SyslogAppender {
             if(facilityPrinting) {
                 buf.append(facilityStr);
             }
+            buf.append(getTag());
             buf.append(packet);
             packet = buf.toString();
         }
@@ -114,9 +109,9 @@ public class EnhancedSyslogAppender extends SyslogAppender {
             if (s != null) {
                 for (String value : s) {
                     if (value.startsWith("\t")) {
-                        sqw.write(hdr + TAB + value.substring(1));
+                        sqw.write(hdr + getTag() + splitMessageBeginText + TAB + value.substring(1));
                     } else {
-                        sqw.write(hdr + value);
+                        sqw.write(hdr + getTag() + value);
                     }
                 }
             }
@@ -131,19 +126,120 @@ public class EnhancedSyslogAppender extends SyslogAppender {
         this.maxPackageSize = maxPackageSize;
     }
 
+    public void setTag(String tag) {
+        this.tag = tag;
+    }
+
+    private String getTag() {
+        if("".equals(tag)) {
+            return "";
+        }
+
+        return " " + tag + ": ";
+    }
+
+    // Customised part ends
+
+    // The following constants are extracted from a syslog.h file
+    // copyrighted by the Regents of the University of California
+    // I hope nobody at Berkley gets offended.
+
+    /** Kernel messages */
+    final static public int LOG_KERN     = 0;
+    /** Random user-level messages */
+    final static public int LOG_USER     = 1<<3;
+    /** Mail system */
+    final static public int LOG_MAIL     = 2<<3;
+    /** System daemons */
+    final static public int LOG_DAEMON   = 3<<3;
+    /** security/authorization messages */
+    final static public int LOG_AUTH     = 4<<3;
+    /** messages generated internally by syslogd */
+    final static public int LOG_SYSLOG   = 5<<3;
+
+    /** line printer subsystem */
+    final static public int LOG_LPR      = 6<<3;
+    /** network news subsystem */
+    final static public int LOG_NEWS     = 7<<3;
+    /** UUCP subsystem */
+    final static public int LOG_UUCP     = 8<<3;
+    /** clock daemon */
+    final static public int LOG_CRON     = 9<<3;
+    /** security/authorization  messages (private) */
+    final static public int LOG_AUTHPRIV = 10<<3;
+    /** ftp daemon */
+    final static public int LOG_FTP      = 11<<3;
+
+    // other codes through 15 reserved for system use
+    /** reserved for local use */
+    final static public int LOG_LOCAL0 = 16<<3;
+    /** reserved for local use */
+    final static public int LOG_LOCAL1 = 17<<3;
+    /** reserved for local use */
+    final static public int LOG_LOCAL2 = 18<<3;
+    /** reserved for local use */
+    final static public int LOG_LOCAL3 = 19<<3;
+    /** reserved for local use */
+    final static public int LOG_LOCAL4 = 20<<3;
+    /** reserved for local use */
+    final static public int LOG_LOCAL5 = 21<<3;
+    /** reserved for local use */
+    final static public int LOG_LOCAL6 = 22<<3;
+    /** reserved for local use*/
+    final static public int LOG_LOCAL7 = 23<<3;
+
+    protected static final int SYSLOG_HOST_OI = 0;
+    protected static final int FACILITY_OI = 1;
+
+    static final String TAB = "    ";
+
+    // Have LOG_USER as default
+    int syslogFacility = LOG_USER;
+    String facilityStr;
+    boolean facilityPrinting = false;
+
+    //SyslogTracerPrintWriter stp;
+    SyslogQuietWriter sqw;
+    String syslogHost;
+
+    /**
+     * If true, the appender will generate the HEADER (timestamp and host name)
+     * part of the syslog packet.
+     * @since 1.2.15
+     */
+    private boolean header = false;
+    /**
+     * Date format used if header = true.
+     * @since 1.2.15
+     */
+    private final SimpleDateFormat dateFormat = new SimpleDateFormat("MMM dd HH:mm:ss ", Locale.ENGLISH);
+    /**
+     * Host name used to identify messages from this appender.
+     * @since 1.2.15
+     */
+    private String localHostname;
+
+    /**
+     * Set to true after the header of the layout has been sent or if it has none.
+     */
+    private boolean layoutHeaderChecked = false;
+
     public
     EnhancedSyslogAppender() {
-        super();
+        this.initSyslogFacilityStr();
     }
 
     public
     EnhancedSyslogAppender(Layout layout, int syslogFacility) {
-        super(layout, syslogFacility);
+        this.layout = layout;
+        this.syslogFacility = syslogFacility;
+        this.initSyslogFacilityStr();
     }
 
     public
     EnhancedSyslogAppender(Layout layout, String syslogHost, int syslogFacility) {
-        super(layout, syslogHost, syslogFacility);
+        this(layout, syslogFacility);
+        setSyslogHost(syslogHost);
     }
 
     /**
@@ -217,7 +313,192 @@ public class EnhancedSyslogAppender extends SyslogAppender {
         }
     }
 
+    /**
+     Returns the integer value corresponding to the named syslog
+     facility, or -1 if it couldn't be recognized.
 
+     @param facilityName one of the strings KERN, USER, MAIL, DAEMON,
+     AUTH, SYSLOG, LPR, NEWS, UUCP, CRON, AUTHPRIV, FTP, LOCAL0,
+     LOCAL1, LOCAL2, LOCAL3, LOCAL4, LOCAL5, LOCAL6, LOCAL7.
+     The matching is case-insensitive.
+
+     @since 1.1
+     */
+    public
+    static
+    int getFacility(String facilityName) {
+        if(facilityName != null) {
+            facilityName = facilityName.trim();
+        }
+        if("KERN".equalsIgnoreCase(facilityName)) {
+            return LOG_KERN;
+        } else if("USER".equalsIgnoreCase(facilityName)) {
+            return LOG_USER;
+        } else if("MAIL".equalsIgnoreCase(facilityName)) {
+            return LOG_MAIL;
+        } else if("DAEMON".equalsIgnoreCase(facilityName)) {
+            return LOG_DAEMON;
+        } else if("AUTH".equalsIgnoreCase(facilityName)) {
+            return LOG_AUTH;
+        } else if("SYSLOG".equalsIgnoreCase(facilityName)) {
+            return LOG_SYSLOG;
+        } else if("LPR".equalsIgnoreCase(facilityName)) {
+            return LOG_LPR;
+        } else if("NEWS".equalsIgnoreCase(facilityName)) {
+            return LOG_NEWS;
+        } else if("UUCP".equalsIgnoreCase(facilityName)) {
+            return LOG_UUCP;
+        } else if("CRON".equalsIgnoreCase(facilityName)) {
+            return LOG_CRON;
+        } else if("AUTHPRIV".equalsIgnoreCase(facilityName)) {
+            return LOG_AUTHPRIV;
+        } else if("FTP".equalsIgnoreCase(facilityName)) {
+            return LOG_FTP;
+        } else if("LOCAL0".equalsIgnoreCase(facilityName)) {
+            return LOG_LOCAL0;
+        } else if("LOCAL1".equalsIgnoreCase(facilityName)) {
+            return LOG_LOCAL1;
+        } else if("LOCAL2".equalsIgnoreCase(facilityName)) {
+            return LOG_LOCAL2;
+        } else if("LOCAL3".equalsIgnoreCase(facilityName)) {
+            return LOG_LOCAL3;
+        } else if("LOCAL4".equalsIgnoreCase(facilityName)) {
+            return LOG_LOCAL4;
+        } else if("LOCAL5".equalsIgnoreCase(facilityName)) {
+            return LOG_LOCAL5;
+        } else if("LOCAL6".equalsIgnoreCase(facilityName)) {
+            return LOG_LOCAL6;
+        } else if("LOCAL7".equalsIgnoreCase(facilityName)) {
+            return LOG_LOCAL7;
+        } else {
+            return -1;
+        }
+    }
+
+
+    /**
+     This method returns immediately as options are activated when they
+     are set.
+     */
+    public
+    void activateOptions() {
+        if (header) {
+            getLocalHostname();
+        }
+        if (layout != null && layout.getHeader() != null) {
+            sendLayoutMessage(layout.getHeader());
+        }
+        layoutHeaderChecked = true;
+    }
+
+    /**
+     The SyslogAppender requires a layout. Hence, this method returns
+     <code>true</code>.
+
+     @since 0.8.4 */
+    public
+    boolean requiresLayout() {
+        return true;
+    }
+
+    /**
+     The <b>SyslogHost</b> option is the name of the the syslog host
+     where log output should go.  A non-default port can be specified by
+     appending a colon and port number to a host name,
+     an IPv4 address or an IPv6 address enclosed in square brackets.
+
+     <b>WARNING</b> If the SyslogHost is not set, then this appender
+     will fail.
+     */
+    public
+    void setSyslogHost(final String syslogHost) {
+        this.sqw = new SyslogQuietWriter(new SyslogWriter(syslogHost),
+                syslogFacility, errorHandler);
+        //this.stp = new SyslogTracerPrintWriter(sqw);
+        this.syslogHost = syslogHost;
+    }
+
+    /**
+     Returns the value of the <b>SyslogHost</b> option.
+     */
+    public
+    String getSyslogHost() {
+        return syslogHost;
+    }
+
+    /**
+     Set the syslog facility. This is the <b>Facility</b> option.
+
+     <p>The <code>facilityName</code> parameter must be one of the
+     strings KERN, USER, MAIL, DAEMON, AUTH, SYSLOG, LPR, NEWS, UUCP,
+     CRON, AUTHPRIV, FTP, LOCAL0, LOCAL1, LOCAL2, LOCAL3, LOCAL4,
+     LOCAL5, LOCAL6, LOCAL7. Case is unimportant.
+
+     @since 0.8.1 */
+    public
+    void setFacility(String facilityName) {
+        if(facilityName == null)
+            return;
+
+        syslogFacility = getFacility(facilityName);
+        if (syslogFacility == -1) {
+            System.err.println("["+facilityName +
+                    "] is an unknown syslog facility. Defaulting to [USER].");
+            syslogFacility = LOG_USER;
+        }
+
+        this.initSyslogFacilityStr();
+
+        // If there is already a sqw, make it use the new facility.
+        if(sqw != null) {
+            sqw.setSyslogFacility(this.syslogFacility);
+        }
+    }
+
+    /**
+     Returns the value of the <b>Facility</b> option.
+     */
+    public
+    String getFacility() {
+        return getFacilityString(syslogFacility);
+    }
+
+    /**
+     If the <b>FacilityPrinting</b> option is set to true, the printed
+     message will include the facility name of the application. It is
+     <em>false</em> by default.
+     */
+    public
+    void setFacilityPrinting(boolean on) {
+        facilityPrinting = on;
+    }
+
+    /**
+     Returns the value of the <b>FacilityPrinting</b> option.
+     */
+    public
+    boolean getFacilityPrinting() {
+        return facilityPrinting;
+    }
+
+    /**
+     * If true, the appender will generate the HEADER part (that is, timestamp and host name)
+     * of the syslog packet.  Default value is false for compatibility with existing behavior,
+     * however should be true unless there is a specific justification.
+     * @since 1.2.15
+     */
+    public final boolean getHeader() {
+        return header;
+    }
+
+    /**
+     * Returns whether the appender produces the HEADER part (that is, timestamp and host name)
+     * of the syslog packet.
+     * @since 1.2.15
+     */
+    public final void setHeader(final boolean val) {
+        header = val;
+    }
 
     /**
      * Get the host name used to identify this appender.
@@ -243,18 +524,17 @@ public class EnhancedSyslogAppender extends SyslogAppender {
      * @since 1.2.15
      */
     private String getPacketHeader(final long timeStamp) {
-        /*
-      If true, the appender will generate the HEADER (timestamp and host name)
-      part of the syslog packet.
-      */
-        StringBuilder buf = new StringBuilder(dateFormat.format(new Date(timeStamp)));
-        //  RFC 3164 says leading space, not leading zero on days 1-9
-        if (buf.charAt(4) == '0') {
-            buf.setCharAt(4, ' ');
+        if (header) {
+            StringBuffer buf = new StringBuffer(dateFormat.format(new Date(timeStamp)));
+            //  RFC 3164 says leading space, not leading zero on days 1-9
+            if (buf.charAt(4) == '0') {
+                buf.setCharAt(4, ' ');
+            }
+            buf.append(getLocalHostname());
+            buf.append(' ');
+            return buf.toString();
         }
-        buf.append(getLocalHostname());
-        buf.append(' ');
-        return buf.toString();
+        return "";
     }
 
     /**
@@ -266,7 +546,7 @@ public class EnhancedSyslogAppender extends SyslogAppender {
             String packet = msg;
             String hdr = getPacketHeader(new Date().getTime());
             if(facilityPrinting || hdr.length() > 0) {
-                StringBuilder buf = new StringBuilder(hdr);
+                StringBuffer buf = new StringBuffer(hdr);
                 if(facilityPrinting) {
                     buf.append(facilityStr);
                 }
