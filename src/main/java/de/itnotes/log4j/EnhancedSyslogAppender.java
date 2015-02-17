@@ -3,7 +3,6 @@ package de.itnotes.log4j;
 import org.apache.log4j.AppenderSkeleton;
 import org.apache.log4j.Layout;
 import org.apache.log4j.helpers.SyslogQuietWriter;
-import org.apache.log4j.helpers.SyslogWriter;
 import org.apache.log4j.spi.LoggingEvent;
 
 import java.io.IOException;
@@ -415,7 +414,8 @@ public class EnhancedSyslogAppender extends AppenderSkeleton {
      */
     public
     void setSyslogHost(final String syslogHost) {
-        this.sqw = new SyslogQuietWriter(new SyslogWriter(syslogHost),
+       // Custom maxPackageSize
+        this.sqw = new SyslogQuietWriter(new SyslogWriter(syslogHost, maxPackageSize),
                 syslogFacility, errorHandler);
         //this.stp = new SyslogTracerPrintWriter(sqw);
         this.syslogHost = syslogHost;
