@@ -29,7 +29,7 @@ public class EnhancedSyslogAppender extends AppenderSkeleton {
 
     private String tag = "";
     private String splitMessageBeginText = "...";
-    private String maxPackageSize = "1019";
+    private String maxPackageSize = "1024";
 
 
     /**
@@ -44,7 +44,9 @@ public class EnhancedSyslogAppender extends AppenderSkeleton {
     private void splitPacket(final String header, final String packet) {
         int byteCount = packet.getBytes().length;
 
-        if (byteCount <= Integer.valueOf(maxPackageSize)) {
+        //      (must allow for up 5to 5 characters in the PRI section
+        //          added by SyslogQuietWriter)
+        if (byteCount <= (Integer.valueOf(maxPackageSize) - 5)) {
             sqw.write(packet);
         } else {
             int split = header.length() + getTag().length() + splitMessageBeginText.length() +
