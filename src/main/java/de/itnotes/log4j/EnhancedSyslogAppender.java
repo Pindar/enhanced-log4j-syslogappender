@@ -3,7 +3,6 @@ package de.itnotes.log4j;
 import org.apache.log4j.AppenderSkeleton;
 import org.apache.log4j.Layout;
 import org.apache.log4j.helpers.SyslogQuietWriter;
-import org.apache.log4j.helpers.SyslogWriter;
 import org.apache.log4j.spi.LoggingEvent;
 
 import java.io.IOException;
@@ -29,7 +28,7 @@ public class EnhancedSyslogAppender extends AppenderSkeleton {
 
     private String tag = "";
     private String splitMessageBeginText = "...";
-    private String maxPackageSize = "1019";
+    private String maxPackageSize = "1024";
 
 
     /**
@@ -44,10 +43,13 @@ public class EnhancedSyslogAppender extends AppenderSkeleton {
     private void splitPacket(final String header, final String packet) {
         int byteCount = packet.getBytes().length;
 
-        if (byteCount <= Integer.valueOf(maxPackageSize)) {
+        //      (must allow for up 5to 5 characters in the PRI section
+        //          added by SyslogQuietWriter)
+        if (byteCount <= (Integer.valueOf(maxPackageSize) - 5)) {
             sqw.write(packet);
         } else {
-            int split = header.length() + (packet.length() - header.length()) / 2;
+            int split = header.length() + getTag().length() + splitMessageBeginText.length() +
+                    (packet.length() - header.length() - getTag().length() - splitMessageBeginText.length()) / 2;
             splitPacket(header, packet.substring(0, split) + "...");
             splitPacket(header, header + getTag() + splitMessageBeginText + packet.substring(split));
         }
@@ -412,7 +414,8 @@ public class EnhancedSyslogAppender extends AppenderSkeleton {
      */
     public
     void setSyslogHost(final String syslogHost) {
-        this.sqw = new SyslogQuietWriter(new SyslogWriter(syslogHost),
+       // Custom maxPackageSize
+        this.sqw = new SyslogQuietWriter(new SyslogWriter(syslogHost, maxPackageSize),
                 syslogFacility, errorHandler);
         //this.stp = new SyslogTracerPrintWriter(sqw);
         this.syslogHost = syslogHost;
